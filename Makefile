@@ -9,7 +9,7 @@ WIN_IP = 192.168.122.197
 TEST_PORT = 1080
 
 REFS = -r:System.dll -r:System.Core.dll
-FLAGS = -optimize+ -target:exe -sdk:4.5
+FLAGS = -optimize+ -unsafe+ -target:exe -sdk:4.5
 
 all: exe loader
 
@@ -34,12 +34,14 @@ deploy: all
 	@$(WINBOX) exec 'taskkill /F /IM powershell.exe' >/dev/null 2>&1 || true
 	@echo '[*] Purging old files from VM...'
 	@$(WINBOX) exec 'del /F /Q Z:\tools\socksd.exe Z:\tools\socksd.ps1' >/dev/null 2>&1 || true
-	@$(WINBOX) exec 'if exist Z:\tools\socksd.exe exit 1' >/dev/null 2>&1 || { echo '[-] socksd.exe still present after delete'; exit 1; }
-	@$(WINBOX) exec 'if exist Z:\tools\socksd.ps1 exit 1' >/dev/null 2>&1 || { echo '[-] socksd.ps1 still present after delete'; exit 1; }
+	@sleep 2
+	@$(WINBOX) exec 'dir Z:\tools\socksd.exe' >/dev/null 2>&1 && { echo '[-] socksd.exe still present after delete'; exit 1; }; true
+	@$(WINBOX) exec 'dir Z:\tools\socksd.ps1' >/dev/null 2>&1 && { echo '[-] socksd.ps1 still present after delete'; exit 1; }; true
 	@echo '[+] Old files removed'
 	@$(WINBOX) tools add $(EXE) $(LOADER)
-	@$(WINBOX) exec 'if not exist Z:\tools\socksd.exe exit 1' >/dev/null 2>&1 || { echo '[-] socksd.exe not found after upload'; exit 1; }
-	@$(WINBOX) exec 'if not exist Z:\tools\socksd.ps1 exit 1' >/dev/null 2>&1 || { echo '[-] socksd.ps1 not found after upload'; exit 1; }
+	@sleep 2
+	@$(WINBOX) exec 'dir Z:\tools\socksd.exe' >/dev/null 2>&1 || { echo '[-] socksd.exe not found after upload'; exit 1; }
+	@$(WINBOX) exec 'dir Z:\tools\socksd.ps1' >/dev/null 2>&1 || { echo '[-] socksd.ps1 not found after upload'; exit 1; }
 	@echo '[+] Fresh files deployed'
 
 test: deploy

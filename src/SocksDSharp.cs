@@ -62,10 +62,12 @@ namespace SocksDSharp
         private readonly bool _authOnce;
         private readonly HashSet<string> _authedIps;
         private readonly object _authLock = new object();
+        private readonly SemaphoreSlim _connGate;
+        private readonly int _timeoutMin;
         private IPEndPoint _bindEndPoint;
 
         public SocksServer(string listenIp, int port, string user, string pass,
-                           bool bindMode, bool authOnce)
+                           bool bindMode, bool authOnce, int maxConn, int timeoutMin)
         {
             _listenIp = listenIp;
             _port = port;
@@ -73,7 +75,9 @@ namespace SocksDSharp
             _authPass = pass;
             _bindMode = bindMode;
             _authOnce = authOnce;
+            _timeoutMin = timeoutMin > 0 ? timeoutMin : 15;
             if (authOnce) _authedIps = new HashSet<string>();
+            if (maxConn > 0) _connGate = new SemaphoreSlim(maxConn, maxConn);
         }
 
         public async Task RunAsync(CancellationToken ct)
@@ -83,7 +87,8 @@ namespace SocksDSharp
                 SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
             listener.Start();
 
-            Log.Info("Listening on {0}:{1}", _listenIp, _port);
+            Log.Info("socksd {0} listening on {1}:{2}",
+                Program.Version, _listenIp, _port);
 
             if (_bindMode)
                 _bindEndPoint = new IPEndPoint(IPAddress.Parse(_listenIp), 0);
@@ -92,6 +97,9 @@ namespace SocksDSharp
             {
                 try
                 {
+                    if (_connGate != null)
+                        await _connGate.WaitAsync(ct).ConfigureAwait(false);
+
                     TcpClient client = await listener.AcceptTcpClientAsync()
                         .ConfigureAwait(false);
                     HandleClientAsync(client, ct);
@@ -167,8 +175,8 @@ namespace SocksDSharp
                                         .ConfigureAwait(false);
                                     Log.Info("client {0}: connected to {1}",
                                         clientIp, cr.Target);
-                                    await RelayAsync(stream, cr.Remote.GetStream(), ct)
-                                        .ConfigureAwait(false);
+                                    await RelayAsync(stream, cr.Remote.GetStream(),
+                                        ct, _timeoutMin).ConfigureAwait(false);
                                 }
                                 return;
                         }
@@ -178,6 +186,10 @@ namespace SocksDSharp
             catch (Exception)
             {
                 // silently drop — matches C version behavior
+            }
+            finally
+            {
+                if (_connGate != null) _connGate.Release();
             }
         }
 
@@ -314,15 +326,15 @@ namespace SocksDSharp
         }
 
         private static async Task RelayAsync(NetworkStream a, NetworkStream b,
-                                              CancellationToken ct)
+                                              CancellationToken ct, int timeoutMin)
         {
             using (CancellationTokenSource timeoutCts =
                 CancellationTokenSource.CreateLinkedTokenSource(ct))
             {
-                timeoutCts.CancelAfter(TimeSpan.FromMinutes(15));
+                timeoutCts.CancelAfter(TimeSpan.FromMinutes(timeoutMin));
 
-                Task t1 = CopyDirection(a, b, timeoutCts);
-                Task t2 = CopyDirection(b, a, timeoutCts);
+                Task t1 = CopyDirection(a, b, timeoutCts, timeoutMin);
+                Task t2 = CopyDirection(b, a, timeoutCts, timeoutMin);
 
                 await Task.WhenAny(t1, t2).ConfigureAwait(false);
                 timeoutCts.Cancel();
@@ -334,12 +346,13 @@ namespace SocksDSharp
         }
 
         private static async Task CopyDirection(NetworkStream from, NetworkStream to,
-                                                  CancellationTokenSource timeoutCts)
+                                                  CancellationTokenSource timeoutCts,
+                                                  int timeoutMin)
         {
             byte[] buf = new byte[65536];
             while (true)
             {
-                timeoutCts.CancelAfter(TimeSpan.FromMinutes(15));
+                timeoutCts.CancelAfter(TimeSpan.FromMinutes(timeoutMin));
 
                 int n = await from.ReadAsync(buf, 0, buf.Length, timeoutCts.Token)
                     .ConfigureAwait(false);
@@ -394,6 +407,8 @@ namespace SocksDSharp
 
     class Program
     {
+        internal const string Version = "1.0.1";
+
         static int Main(string[] args)
         {
             string listenIp = "0.0.0.0";
@@ -403,6 +418,8 @@ namespace SocksDSharp
             bool bindMode = false;
             bool authOnce = false;
             bool quiet = false;
+            int maxConn = 0;
+            int timeout = 15;
 
             for (int i = 0; i < args.Length; i++)
             {
@@ -427,16 +444,40 @@ namespace SocksDSharp
                     case "-u":
                     case "--user":
                         if (i + 1 >= args.Length) return Usage();
-                        user = args[i + 1];
-                        args[i + 1] = new string('\0', args[i + 1].Length);
+                        user = new string(args[i + 1].ToCharArray());
+                        ZeroString(args[i + 1]);
+                        args[i + 1] = null;
                         i++;
                         break;
                     case "-P":
                     case "--pass":
                         if (i + 1 >= args.Length) return Usage();
-                        pass = args[i + 1];
-                        args[i + 1] = new string('\0', args[i + 1].Length);
+                        pass = new string(args[i + 1].ToCharArray());
+                        ZeroString(args[i + 1]);
+                        args[i + 1] = null;
                         i++;
+                        break;
+                    case "-t":
+                    case "--timeout":
+                        if (i + 1 >= args.Length) return Usage();
+                        int t;
+                        if (!int.TryParse(args[++i], out t) || t < 1)
+                        {
+                            Console.Error.WriteLine("fatal: invalid timeout '{0}'", args[i]);
+                            return 1;
+                        }
+                        timeout = t;
+                        break;
+                    case "-c":
+                    case "--max-conn":
+                        if (i + 1 >= args.Length) return Usage();
+                        int mc;
+                        if (!int.TryParse(args[++i], out mc) || mc < 1)
+                        {
+                            Console.Error.WriteLine("fatal: invalid max-conn '{0}'", args[i]);
+                            return 1;
+                        }
+                        maxConn = mc;
                         break;
                     case "-b":
                     case "--bind":
@@ -450,6 +491,10 @@ namespace SocksDSharp
                     case "--quiet":
                         quiet = true;
                         break;
+                    case "-v":
+                    case "--version":
+                        Console.Error.WriteLine("socksd " + Version);
+                        return 0;
                     case "-h":
                     case "--help":
                         return Usage();
@@ -480,7 +525,7 @@ namespace SocksDSharp
             };
 
             SocksServer server = new SocksServer(
-                listenIp, port, user, pass, bindMode, authOnce);
+                listenIp, port, user, pass, bindMode, authOnce, maxConn, timeout);
 
             try
             {
@@ -510,11 +555,24 @@ namespace SocksDSharp
                 "  -p, --port <port>    listen port (default: 1080)\n" +
                 "  -u, --user <user>    username for SOCKS5 auth\n" +
                 "  -P, --pass <pass>    password for SOCKS5 auth\n" +
+                "  -t, --timeout <min>  idle timeout in minutes (default: 15)\n" +
+                "  -c, --max-conn <n>   max concurrent connections (default: unlimited)\n" +
                 "  -1, --auth-once      whitelist IP after first successful auth\n" +
                 "  -b, --bind           bind outgoing connections to listen IP\n" +
                 "  -q, --quiet          suppress all log output\n" +
+                "  -v, --version        show version\n" +
                 "  -h, --help           show this help message\n");
             return 1;
+        }
+
+        private static unsafe void ZeroString(string s)
+        {
+            if (s == null) return;
+            fixed (char* p = s)
+            {
+                for (int j = 0; j < s.Length; j++)
+                    p[j] = '\0';
+            }
         }
     }
 }

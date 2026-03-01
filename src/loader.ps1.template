@@ -8,6 +8,8 @@ function Invoke-SocksD {
         [int]$Port,
         [string]$User,
         [string]$Pass,
+        [int]$Timeout,
+        [int]$MaxConn,
         [switch]$Bind,
         [switch]$AuthOnce,
         [switch]$Quiet,
@@ -18,6 +20,8 @@ function Invoke-SocksD {
     if ($Port)     { $a += "-p", [string]$Port }
     if ($User)     { $a += "-u", $User }
     if ($Pass)     { $a += "-P", $Pass }
+    if ($Timeout)  { $a += "-t", [string]$Timeout }
+    if ($MaxConn)  { $a += "-c", [string]$MaxConn }
     if ($Bind)     { $a += "-b" }
     if ($AuthOnce) { $a += "-1" }
     if ($Quiet)    { $a += "-q" }
