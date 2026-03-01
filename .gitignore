@@ -1,4 +1,5 @@
 CLAUDE.md
+.claude/
 bin/
 obj/
 *.exe
@@ -7,3 +8,4 @@ obj/
 *.user
 .vs/
 .idea/
+*.ps1
