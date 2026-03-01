@@ -1,11 +1,10 @@
 CLAUDE.md
 .claude/
+dist/
 bin/
 obj/
-*.exe
 *.dll
 *.pdb
 *.user
 .vs/
 .idea/
-*.ps1

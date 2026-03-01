@@ -136,7 +136,7 @@ namespace SocksDSharp
                                 else if (am == AuthMethod.Username)
                                     state = SocksState.NeedAuth;
 
-                                await SendAuthResponse(stream, 0x05, (byte)am)
+                                await SendAuthResponse(stream, 0x05, (byte)am, ct)
                                     .ConfigureAwait(false);
                                 if (am == AuthMethod.Invalid) return;
                                 break;
@@ -144,7 +144,7 @@ namespace SocksDSharp
                             case SocksState.NeedAuth:
                                 bool ok = CheckCredentials(buf, n);
                                 await SendAuthResponse(stream, 0x01,
-                                    (byte)(ok ? 0x00 : 0x01)).ConfigureAwait(false);
+                                    (byte)(ok ? 0x00 : 0x01), ct).ConfigureAwait(false);
                                 if (!ok) return;
 
                                 state = SocksState.Authed;
@@ -156,14 +156,14 @@ namespace SocksDSharp
                                     .ConfigureAwait(false);
                                 if (cr.Error != SocksError.Success)
                                 {
-                                    await SendSocksReply(stream, cr.Error)
+                                    await SendSocksReply(stream, cr.Error, ct)
                                         .ConfigureAwait(false);
                                     return;
                                 }
 
                                 using (cr.Remote)
                                 {
-                                    await SendSocksReply(stream, SocksError.Success)
+                                    await SendSocksReply(stream, SocksError.Success, ct)
                                         .ConfigureAwait(false);
                                     Log.Info("client {0}: connected to {1}",
                                         clientIp, cr.Target);
@@ -336,7 +336,7 @@ namespace SocksDSharp
         private static async Task CopyDirection(NetworkStream from, NetworkStream to,
                                                   CancellationTokenSource timeoutCts)
         {
-            byte[] buf = new byte[1024];
+            byte[] buf = new byte[65536];
             while (true)
             {
                 timeoutCts.CancelAfter(TimeSpan.FromMinutes(15));
@@ -353,22 +353,24 @@ namespace SocksDSharp
         }
 
         private static async Task SendAuthResponse(NetworkStream s,
-                                                     byte version, byte method)
+                                                     byte version, byte method,
+                                                     CancellationToken ct)
         {
             byte[] resp = new byte[] { version, method };
-            await s.WriteAsync(resp, 0, 2).ConfigureAwait(false);
-            await s.FlushAsync().ConfigureAwait(false);
+            await s.WriteAsync(resp, 0, 2, ct).ConfigureAwait(false);
+            await s.FlushAsync(ct).ConfigureAwait(false);
         }
 
-        private static async Task SendSocksReply(NetworkStream s, SocksError err)
+        private static async Task SendSocksReply(NetworkStream s, SocksError err,
+                                                    CancellationToken ct)
         {
             byte[] resp = new byte[] {
                 0x05, (byte)err, 0x00, 0x01,
                 0, 0, 0, 0,
                 0, 0
             };
-            await s.WriteAsync(resp, 0, 10).ConfigureAwait(false);
-            await s.FlushAsync().ConfigureAwait(false);
+            await s.WriteAsync(resp, 0, 10, ct).ConfigureAwait(false);
+            await s.FlushAsync(ct).ConfigureAwait(false);
         }
 
         private bool IsAuthedIp(string ip)
@@ -414,7 +416,13 @@ namespace SocksDSharp
                     case "-p":
                     case "--port":
                         if (i + 1 >= args.Length) return Usage();
-                        port = int.Parse(args[++i]);
+                        int p;
+                        if (!int.TryParse(args[++i], out p) || p < 1 || p > 65535)
+                        {
+                            Console.Error.WriteLine("fatal: invalid port '{0}'", args[i]);
+                            return 1;
+                        }
+                        port = p;
                         break;
                     case "-u":
                     case "--user":
