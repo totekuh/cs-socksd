@@ -407,34 +407,44 @@ namespace SocksDSharp
                 switch (args[i])
                 {
                     case "-i":
+                    case "--ip":
                         if (i + 1 >= args.Length) return Usage();
                         listenIp = args[++i];
                         break;
                     case "-p":
+                    case "--port":
                         if (i + 1 >= args.Length) return Usage();
                         port = int.Parse(args[++i]);
                         break;
                     case "-u":
+                    case "--user":
                         if (i + 1 >= args.Length) return Usage();
                         user = args[i + 1];
                         args[i + 1] = new string('\0', args[i + 1].Length);
                         i++;
                         break;
                     case "-P":
+                    case "--pass":
                         if (i + 1 >= args.Length) return Usage();
                         pass = args[i + 1];
                         args[i + 1] = new string('\0', args[i + 1].Length);
                         i++;
                         break;
                     case "-b":
+                    case "--bind":
                         bindMode = true;
                         break;
                     case "-1":
+                    case "--auth-once":
                         authOnce = true;
                         break;
                     case "-q":
+                    case "--quiet":
                         quiet = true;
                         break;
+                    case "-h":
+                    case "--help":
+                        return Usage();
                     default:
                         return Usage();
                 }
@@ -486,19 +496,16 @@ namespace SocksDSharp
             Console.Error.WriteLine(
                 "socksd SOCKS5 Server\n" +
                 "--------------------\n" +
-                "usage: socksd -1 -q -b -i listenip -p port -u user -P password\n" +
-                "all arguments are optional.\n" +
-                "by default listenip is 0.0.0.0 and port 1080.\n\n" +
-                "option -q activates quiet mode: suppress all log output\n" +
-                "option -b forces outgoing connections to be bound to the ip " +
-                "specified with -i\n" +
-                "option -1 activates auth_once mode: once a specific ip address\n" +
-                "authed successfully with user/pass, it is added to a whitelist\n" +
-                "and may use the proxy without auth.\n" +
-                "this is handy for programs like firefox that don't support\n" +
-                "user/pass auth. for it to work you'd basically make one connection\n" +
-                "with another program that supports it, and then you can use " +
-                "firefox too.\n");
+                "usage: socksd [options]\n\n" +
+                "options:\n" +
+                "  -i, --ip <addr>      listen address (default: 0.0.0.0)\n" +
+                "  -p, --port <port>    listen port (default: 1080)\n" +
+                "  -u, --user <user>    username for SOCKS5 auth\n" +
+                "  -P, --pass <pass>    password for SOCKS5 auth\n" +
+                "  -1, --auth-once      whitelist IP after first successful auth\n" +
+                "  -b, --bind           bind outgoing connections to listen IP\n" +
+                "  -q, --quiet          suppress all log output\n" +
+                "  -h, --help           show this help message\n");
             return 1;
         }
     }

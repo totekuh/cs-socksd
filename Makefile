@@ -17,23 +17,45 @@ loader: $(LOADER)
 
 $(LOADER): $(EXE)
 	@echo '[*] Generating reflective loader...'
-	@echo '# socksd reflective loader' > $(LOADER)
-	@echo '# Usage: powershell -ep bypass -f socksd.ps1 [args]' >> $(LOADER)
-	@echo '# Usage: Invoke-SocksD [args]' >> $(LOADER)
-	@echo '' >> $(LOADER)
-	@echo 'function Invoke-SocksD {' >> $(LOADER)
+	@printf '%s\n' \
+	  '# socksd reflective loader' \
+	  '# Usage: powershell -ep bypass -f socksd.ps1 -Port 1080' \
+	  '# Usage: Invoke-SocksD -Port 1080 -User admin -Pass secret' \
+	  '' \
+	  'function Invoke-SocksD {' \
+	  '    param(' \
+	  '        [string]$$IP,' \
+	  '        [int]$$Port,' \
+	  '        [string]$$User,' \
+	  '        [string]$$Pass,' \
+	  '        [switch]$$Bind,' \
+	  '        [switch]$$AuthOnce,' \
+	  '        [switch]$$Quiet,' \
+	  '        [switch]$$Help' \
+	  '    )' \
+	  '    $$a = @()' \
+	  '    if ($$IP)       { $$a += "-i", $$IP }' \
+	  '    if ($$Port)     { $$a += "-p", [string]$$Port }' \
+	  '    if ($$User)     { $$a += "-u", $$User }' \
+	  '    if ($$Pass)     { $$a += "-P", $$Pass }' \
+	  '    if ($$Bind)     { $$a += "-b" }' \
+	  '    if ($$AuthOnce) { $$a += "-1" }' \
+	  '    if ($$Quiet)    { $$a += "-q" }' \
+	  '    if ($$Help)     { $$a += "-h" }' \
+	  > $(LOADER)
 	@echo '    $$b64 = @"' >> $(LOADER)
 	@base64 -w 0 $(EXE) >> $(LOADER)
-	@echo '' >> $(LOADER)
-	@echo '"@' >> $(LOADER)
-	@echo '    $$bytes = [Convert]::FromBase64String($$b64)' >> $(LOADER)
-	@echo '    $$asm = [Reflection.Assembly]::Load($$bytes)' >> $(LOADER)
-	@echo '    $$asm.EntryPoint.Invoke($$null, @(,([string[]]$$args)))' >> $(LOADER)
-	@echo '}' >> $(LOADER)
-	@echo '' >> $(LOADER)
-	@echo 'if ($$MyInvocation.InvocationName -ne ".") {' >> $(LOADER)
-	@echo '    Invoke-SocksD @args' >> $(LOADER)
-	@echo '}' >> $(LOADER)
+	@printf '\n%s\n' \
+	  '"@' \
+	  '    $$bytes = [Convert]::FromBase64String($$b64)' \
+	  '    $$asm = [Reflection.Assembly]::Load($$bytes)' \
+	  '    $$asm.EntryPoint.Invoke($$null, @(,([string[]]$$a)))' \
+	  '}' \
+	  '' \
+	  'if ($$MyInvocation.InvocationName -ne ".") {' \
+	  '    Invoke-SocksD @PSBoundParameters' \
+	  '}' \
+	  >> $(LOADER)
 	@echo '[+] $(LOADER) generated'
 
 clean:
