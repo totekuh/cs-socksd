@@ -13,7 +13,7 @@ Runs on any modern Windows machine (Win7+ / Server 2012+) out of the box — no 
 | **Protocol** | SOCKS5 CONNECT (IPv4, IPv6, domain names) |
 | **Auth** | Optional username/password, auth-once IP whitelisting |
 | **Concurrency** | Async I/O via `TcpListener` / `TcpClient` |
-| **Timeout** | 15-minute idle disconnect on relayed connections |
+| **Timeout** | Configurable idle disconnect on relayed connections (default: 15 min) |
 | **Execution** | Native `.exe`, reflective PowerShell loader, `execute-assembly` |
 | **Runtime** | .NET Framework 4.x (pre-installed on every modern Windows box) |
 
@@ -25,6 +25,7 @@ Download `socksd.exe` and `socksd.ps1` from the [Releases](https://github.com/to
 socksd.exe -p 1080
 socksd.exe -i 10.10.10.100 -p 4200 -u admin -P secret
 socksd.exe -q -b -p 1080
+socksd.exe -p 1080 -t 5 -c 50
 ```
 
 ### Fileless Execution
@@ -47,9 +48,12 @@ execute-assembly socksd.exe -p 1080
 -p, --port <port>    Listen port (default: 1080)
 -u, --user <user>    Username for SOCKS5 auth
 -P, --pass <pass>    Password for SOCKS5 auth
+-t, --timeout <min>  Idle timeout in minutes (default: 15)
+-c, --max-conn <n>   Max concurrent connections (default: unlimited)
 -1, --auth-once      Whitelist IP after first successful auth
 -b, --bind           Bind outgoing connections to listen IP
 -q, --quiet          Suppress all output
+-v, --version        Show version
 -h, --help           Show help message
 ```
 
@@ -67,5 +71,6 @@ sudo apt install mono-devel
 make          # compile socksd.exe
 make loader   # generate socksd.ps1 reflective loader
 make all      # both
+make test     # deploy to VM and run functional tests
 make clean    # remove build artifacts
 ```
