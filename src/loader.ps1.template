@@ -10,9 +10,11 @@ function Invoke-SocksD {
         [string]$Pass,
         [int]$Timeout,
         [int]$MaxConn,
+        [string]$Reverse,
         [switch]$Bind,
         [switch]$AuthOnce,
         [switch]$Quiet,
+        [switch]$Version,
         [switch]$Help
     )
     $a = @()
@@ -22,9 +24,11 @@ function Invoke-SocksD {
     if ($Pass)     { $a += "-P", $Pass }
     if ($Timeout)  { $a += "-t", [string]$Timeout }
     if ($MaxConn)  { $a += "-c", [string]$MaxConn }
+    if ($Reverse)  { $a += "-R", $Reverse }
     if ($Bind)     { $a += "-b" }
     if ($AuthOnce) { $a += "-1" }
     if ($Quiet)    { $a += "-q" }
+    if ($Version)  { $a += "-v" }
     if ($Help)     { $a += "-h" }
     $b64 = @"
 @@BASE64@@
